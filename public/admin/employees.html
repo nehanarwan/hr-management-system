@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Employees &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+let departments = [];
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/employees.html');
+  main.innerHTML = ui.head('Employees', 'Everyone in ' + user.companyName,
+    '<button class="btn" onclick="addEmployee()">Add employee</button>') + `
+    <div class="card">
+      <div class="card-head">
+        <h2>People</h2>
+        <input id="search" placeholder="Search by name" style="width:220px">
+      </div>
+      <div id="list" class="loading">Loading...</div>
+    </div>`;
+
+  const depts = await api.get('/api/departments?limit=100');
+  departments = depts.data;
+
+  let timer;
+  document.getElementById('search').oninput = () => { clearTimeout(timer); timer = setTimeout(load, 250); };
+  load();
+}
+
+async function load() {
+  const list = document.getElementById('list');
+  const search = document.getElementById('search').value.trim();
+  try {
+    const result = await api.get('/api/employees?limit=100' + (search ? '&search=' + encodeURIComponent(search) : ''));
+    list.className = '';
+    list.innerHTML = ui.table(
+      ['Name', 'Email', 'Department', 'Role', ''],
+      result.data.map(e => [
+        '<strong>' + ui.name(e) + '</strong>',
+        ui.escape(e.email || '-'),
+        ui.escape(e.department_name || '-'),
+        '<span class="badge role">' + ui.escape(e.role || 'employee') + '</span>',
+        '<div class="btn-row">' +
+          '<a class="btn small secondary" href="/manager/employee.html?id=' + e.id + '">Leave</a>' +
+          '<button class="btn small secondary" onclick="setEntitlement(' + e.id + ')">Entitlement</button>' +
+        '</div>',
+      ]),
+      'No employees found.'
+    );
+  } catch (err) {
+    list.className = '';
+    list.innerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+function addEmployee() {
+  const options = '<option value="">No department</option>' +
+    departments.map(d => '<option value="' + d.id + '">' + ui.escape(d.name) + '</option>').join('');
+
+  ui.modal('Add an employee', `
+    <div class="field-row">
+      <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" required></div>
+      <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" required></div>
+    </div>
+    <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" required></div>
+    <div class="field"><label for="password">Temporary password</label><input id="password" name="password" type="text" required minlength="6" value="password123"></div>
+    <div class="field"><label for="departmentId">Department</label><select id="departmentId" name="departmentId">${options}</select></div>
+    <div class="field"><label for="annualDays">Annual leave days</label><input id="annualDays" name="annualDays" type="number" min="1" max="365" value="20"></div>
+    <div class="hint">A login account and this year's entitlement are created at the same time.</div>`,
+    async (form) => {
+      await api.post('/api/employees', {
+        firstName: form.get('firstName'),
+        lastName: form.get('lastName'),
+        email: form.get('email'),
+        password: form.get('password'),
+        departmentId: form.get('departmentId') ? Number(form.get('departmentId')) : null,
+        annualDays: Number(form.get('annualDays')),
+      });
+      ui.toast('Employee added.', 'ok');
+      load();
+    });
+}
+
+function setEntitlement(employeeId) {
+  const year = new Date().getFullYear();
+  ui.modal('Set annual entitlement', `
+    <div class="field"><label for="totalDays">Days for ${year}</label>
+      <input id="totalDays" name="totalDays" type="number" min="1" max="365" required value="20"></div>
+    <div class="hint">The entitlement cannot be set below the days already approved.</div>`,
+    async (form) => {
+      const days = Number(form.get('totalDays'));
+      try {
+        await api.patch('/api/leave/balance/' + employeeId + '/' + year, { totalDays: days });
+      } catch (err) {
+        // No entitlement for this year yet, so create one.
+        if (/not found/i.test(err.message)) {
+          await api.post('/api/leave/balance', { employeeId, year, totalDays: days });
+        } else {
+          throw err;
+        }
+      }
+      ui.toast('Entitlement updated.', 'ok');
+    });
+}
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('employee', 'manager', 'admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/employee/dashboard.html');
+  main.innerHTML = ui.head(
+    'Welcome back, ' + user.firstName,
+    (user.departmentName ? user.departmentName + ' department' : 'No department set') + ' at ' + user.companyName,
+    '<a class="btn" href="/employee/request.html">Request leave</a>'
+  ) + '<div class="loading" id="body">Loading your leave...</div>';
+
+  try {
+    const [balance, requests, upcoming, out] = await Promise.all([
+      api.get('/api/leave/my-balance'),
+      api.get('/api/leave/requests?limit=5'),
+      api.get('/api/leave/upcoming'),
+      api.get('/api/calendar/who-is-out'),
+    ]);
+
+    const b = balance.data;
+    const next = upcoming.data[0];
+
+    document.getElementById('body').outerHTML = `
+      <div class="grid grid-4">
+        ${ui.stat('Annual entitlement', b.entitlement + ' days', 'For ' + b.year)}
+        ${ui.stat('Remaining balance', b.remaining + ' days', 'Entitlement minus approved leave', true)}
+        ${ui.stat('Used (approved)', b.used + ' days', 'Already taken or booked')}
+        ${ui.stat('Pending', b.pending + ' days', 'Waiting for a decision')}
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <h2>What you can still request</h2>
+        <p style="margin:0;color:var(--ink-2)">
+          Your balance is <strong>${b.remaining} days</strong>. Pending requests do not reduce it,
+          but they are reserved, so you can request up to
+          <strong>${b.requestable} more day(s)</strong> right now.
+        </p>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:18px">
+        <div class="card">
+          <div class="card-head"><h2>Recent requests</h2><a href="/employee/history.html">See all</a></div>
+          ${ui.table(['Dates', 'Days', 'Status'], requests.data.map(r => [
+            ui.range(r.start_date, r.end_date),
+            '<span class="num">' + r.total_days + '</span>',
+            ui.badge(r.status),
+          ]), 'You have not requested any leave yet.')}
+        </div>
+
+        <div class="card">
+          <h2>Upcoming approved leave</h2>
+          ${next
+            ? `<p style="margin:0">Your next approved leave is <strong>${ui.range(next.start_date, next.end_date)}</strong> (${next.total_days} day(s)).</p>`
+            : '<div class="empty">No approved leave coming up.</div>'}
+          <h3 style="margin-top:20px">Who is off today</h3>
+          ${out.data.length
+            ? '<ul style="margin:8px 0 0;padding-left:18px;color:var(--ink-2)">' +
+              out.data.map(p => `<li>${ui.name(p)}${p.department_name ? ' &middot; ' + ui.escape(p.department_name) : ''}</li>`).join('') +
+              '</ul>'
+            : '<div class="empty">Everyone is in today.</div>'}
+        </div>
+      </div>`;
+
+    mountChatWidget(user.role);
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

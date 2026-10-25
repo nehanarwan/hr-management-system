@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create a company &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <div class="landing">
+    <section class="pitch">
+      <h1>Set up your company in one minute</h1>
+      <p>Creating a company gives you an administrator account. From there you add departments, employees and their leave entitlements.</p>
+      <ul>
+        <li>Your company's data is completely separate from every other company's</li>
+        <li>You become the first administrator</li>
+        <li>A default leave policy is created: 20 days, weekends and holidays not counted</li>
+        <li>Add your team afterwards from the Employees page</li>
+      </ul>
+    </section>
+
+    <section class="form-side">
+      <div class="form-box">
+        <h2>Create a company</h2>
+        <p>Already registered? <a href="/index.html">Sign in instead</a>.</p>
+
+        <div id="message"></div>
+
+        <form id="register-form">
+          <div class="field">
+            <label for="companyName">Company name</label>
+            <input id="companyName" required maxlength="255" placeholder="SALEHO Organization">
+          </div>
+
+          <div class="field">
+            <label for="companySlug">Short name</label>
+            <input id="companySlug" required minlength="3" maxlength="50" pattern="[a-z0-9\-]+" placeholder="saleho">
+            <div class="hint">Lowercase letters, numbers and dashes. Everyone types this to sign in.</div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="firstName">Your first name</label>
+              <input id="firstName" required maxlength="100">
+            </div>
+            <div class="field">
+              <label for="lastName">Your last name</label>
+              <input id="lastName" required maxlength="100">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="email">Your email</label>
+            <input id="email" type="email" required placeholder="you@company.com">
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" required minlength="6">
+            <div class="hint">At least 6 characters.</div>
+          </div>
+
+          <button type="submit" class="btn" style="width:100%" id="submit">Create company</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (api.token() && api.user()) {
+      window.location.href = homeFor(api.user().role);
+    }
+
+    const nameInput = document.getElementById('companyName');
+    const slugInput = document.getElementById('companySlug');
+    let slugEdited = false;
+
+    slugInput.oninput = function () { slugEdited = true; };
+
+    nameInput.oninput = function () {
+      if (slugEdited) return;
+      slugInput.value = nameInput.value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 50);
+    };
+
+    document.getElementById('register-form').onsubmit = async function (event) {
+      event.preventDefault();
+      var message = document.getElementById('message');
+      var submit = document.getElementById('submit');
+      message.innerHTML = '';
+      submit.disabled = true;
+      submit.textContent = 'Creating...';
+
+      var companySlug = slugInput.value.trim().toLowerCase();
+
+      try {
+        await api.post('/api/auth/register', {
+          companyName: nameInput.value.trim(),
+          companySlug: companySlug,
+          firstName: document.getElementById('firstName').value.trim(),
+          lastName: document.getElementById('lastName').value.trim(),
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value,
+        });
+
+        var user = await login(
+          companySlug,
+          document.getElementById('email').value.trim(),
+          document.getElementById('password').value
+        );
+        window.location.href = homeFor(user.role);
+      } catch (err) {
+        message.innerHTML = '<div class="alert error">' + err.message + '</div>';
+        submit.disabled = false;
+        submit.textContent = 'Create company';
+      }
+    };
+  </script>
+</body>
+</html>

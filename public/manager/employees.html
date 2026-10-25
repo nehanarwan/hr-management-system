@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My team &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('manager', 'admin');
+if (user) start();
+
+function start() {
+  const main = ui.layout(user, '/manager/employees.html');
+  main.innerHTML = ui.head('My team', 'Everyone in the departments you manage') + `
+    <div class="card">
+      <div class="card-head">
+        <h2>Team members</h2>
+        <input id="search" placeholder="Search by name" style="width:220px">
+      </div>
+      <div id="list" class="loading">Loading...</div>
+    </div>`;
+
+  let timer;
+  document.getElementById('search').oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(load, 250);
+  };
+  load();
+}
+
+async function load() {
+  const list = document.getElementById('list');
+  const search = document.getElementById('search').value.trim();
+  list.className = 'loading';
+  list.textContent = 'Loading...';
+
+  try {
+    const result = await api.get('/api/employees?limit=50' + (search ? '&search=' + encodeURIComponent(search) : ''));
+    list.className = '';
+    list.innerHTML = ui.table(
+      ['Name', 'Department', 'Email', 'Role', ''],
+      result.data.map(r => [
+        ui.name(r),
+        ui.escape(r.department_name || '-'),
+        ui.escape(r.email || '-'),
+        '<span class="badge role">' + ui.escape(r.role || 'employee') + '</span>',
+        '<a class="btn small secondary" href="/manager/employee.html?id=' + r.id + '">View leave</a>',
+      ]),
+      'Nobody is in your departments yet.'
+    );
+  } catch (err) {
+    list.className = '';
+    list.innerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manager dashboard &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('manager', 'admin');
+if (user) start();
+
+function today() { return new Date().toISOString().slice(0, 10); }
+function inDays(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function start() {
+  const main = ui.layout(user, '/manager/dashboard.html');
+  main.innerHTML = ui.head('Manager dashboard', 'Your team at a glance',
+    '<a class="btn" href="/manager/leave-requests.html">Review requests</a>') +
+    '<div class="loading" id="body">Loading your team...</div>';
+
+  try {
+    const [summary, pending, out, upcoming] = await Promise.all([
+      api.get('/api/manager/summary'),
+      api.get('/api/manager/leave-requests?status=Pending&limit=5'),
+      api.get('/api/calendar/who-is-out'),
+      api.get('/api/calendar?scope=team&from=' + today() + '&to=' + inDays(60)),
+    ]);
+    const s = summary.data;
+
+    document.getElementById('body').outerHTML = `
+      <div class="grid grid-4">
+        ${ui.stat('Team members', s.employeeCount, 'in your departments')}
+        ${ui.stat('Pending requests', s.pendingCount, 'waiting for your decision', true)}
+        ${ui.stat('Approved requests', s.approvedCount, 'this company year')}
+        ${ui.stat('Off today', out.data.length, 'across the company')}
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="card-head">
+          <h2>Waiting for you</h2>
+          <a href="/manager/leave-requests.html">See all</a>
+        </div>
+        ${ui.table(['Employee', 'Dates', 'Days', 'Reason', ''], pending.data.map(r => [
+          ui.name(r),
+          ui.range(r.start_date, r.end_date),
+          '<span class="num">' + r.total_days + '</span>',
+          ui.escape(r.user_comment || '-'),
+          '<div class="btn-row">' +
+            '<button class="btn small" onclick="approve(' + r.id + ')">Approve</button>' +
+            '<button class="btn small danger" onclick="reject(' + r.id + ')">Reject</button>' +
+          '</div>',
+        ]), 'Nothing is waiting for a decision.')}
+      </div>
+
+      <div class="grid grid-2" style="margin-top:18px">
+        <div class="card">
+          <h2>Upcoming team leave</h2>
+          ${ui.table(['Employee', 'Dates', 'Days'], upcoming.data.slice(0, 8).map(r => [
+            ui.name(r), ui.range(r.start_date, r.end_date), '<span class="num">' + r.total_days + '</span>',
+          ]), 'No approved team leave in the next 60 days.')}
+        </div>
+        <div class="card">
+          <h2>Off today</h2>
+          ${ui.table(['Employee', 'Department', 'Until'], out.data.map(r => [
+            ui.name(r), ui.escape(r.department_name || '-'), ui.date(r.end_date),
+          ]), 'Everyone is in today.')}
+        </div>
+      </div>`;
+
+    mountChatWidget(user.role);
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+async function approve(id) {
+  try {
+    await api.patch('/api/manager/leave-requests/' + id + '/approve', { comment: null });
+    ui.toast('Request approved. The balance has been updated.', 'ok');
+    setTimeout(() => location.reload(), 900);
+  } catch (err) {
+    ui.toast(err.message, 'error');
+  }
+}
+
+function reject(id) {
+  ui.modal('Reject this request', `
+    <div class="field">
+      <label for="reason">Reason (the employee will see this)</label>
+      <textarea id="reason" name="reason" required maxlength="500"></textarea>
+    </div>`, async (form) => {
+    await api.patch('/api/manager/leave-requests/' + id + '/reject', { reason: form.get('reason') });
+    ui.toast('Request rejected.', 'ok');
+    setTimeout(() => location.reload(), 900);
+  });
+}
+
+  </script>
+</body>
+</html>

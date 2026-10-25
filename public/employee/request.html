@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Request leave &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('employee', 'manager', 'admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/employee/request.html');
+  main.innerHTML = ui.head('Request leave', 'Pick your dates and say why. Your manager decides.') + `
+    <div class="grid grid-2">
+      <div class="card">
+        <div id="message"></div>
+        <form id="form">
+          <div class="field-row">
+            <div class="field">
+              <label for="startDate">First day</label>
+              <input type="date" id="startDate" required>
+            </div>
+            <div class="field">
+              <label for="endDate">Last day</label>
+              <input type="date" id="endDate" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="reason">Reason</label>
+            <textarea id="reason" maxlength="500" required placeholder="Annual leave, family visit, ..."></textarea>
+          </div>
+          <div id="cost" class="hint"></div>
+          <button type="submit" class="btn" id="submit" style="margin-top:12px">Submit request</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Before you submit</h2>
+        <div id="balance" class="loading">Checking your balance...</div>
+      </div>
+    </div>`;
+
+  const startInput = document.getElementById('startDate');
+  const endInput = document.getElementById('endDate');
+  const cost = document.getElementById('cost');
+
+  let available = 0;
+
+  try {
+    const balance = await api.get('/api/leave/my-balance');
+    const b = balance.data;
+    available = b.requestable;
+    document.getElementById('balance').outerHTML = `
+      <div id="balance">
+        <p style="margin-top:0">You have <strong>${b.remaining} day(s)</strong> remaining out of ${b.entitlement}.</p>
+        <p>${b.pending} day(s) are already waiting for a decision, so you can request up to
+        <strong>${b.requestable} day(s)</strong> now.</p>
+        <p class="hint">Weekends and company holidays are not counted, so a Friday to Monday request usually costs 2 days.</p>
+      </div>`;
+  } catch (err) {
+    document.getElementById('balance').outerHTML = ui.alert(err.message, 'error');
+  }
+
+  // Show what the dates will actually cost, using the same calculation the server uses.
+  async function updateCost() {
+    if (!startInput.value || !endInput.value) { cost.textContent = ''; return; }
+    try {
+      const result = await api.get('/api/leave/requests/preview?startDate=' + startInput.value + '&endDate=' + endInput.value);
+      const days = result.data.totalDays;
+      cost.textContent = 'These dates cost ' + days + ' working day(s). You can request ' + available + '.';
+      cost.style.color = days > available ? 'var(--rejected)' : 'var(--ink-3)';
+    } catch (err) {
+      cost.textContent = '';
+    }
+  }
+  startInput.onchange = updateCost;
+  endInput.onchange = updateCost;
+
+  document.getElementById('form').onsubmit = async (event) => {
+    event.preventDefault();
+    const message = document.getElementById('message');
+    const submit = document.getElementById('submit');
+    message.innerHTML = '';
+    submit.disabled = true;
+
+    try {
+      await api.post('/api/leave/requests', {
+        startDate: startInput.value,
+        endDate: endInput.value,
+        reason: document.getElementById('reason').value.trim(),
+      });
+      window.location.href = '/employee/history.html?submitted=1';
+    } catch (err) {
+      message.innerHTML = ui.alert(err.message, 'error');
+      submit.disabled = false;
+    }
+  };
+}
+
+  </script>
+</body>
+</html>

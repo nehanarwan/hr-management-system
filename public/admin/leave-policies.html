@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leave policy &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/leave-policies.html');
+  main.innerHTML = ui.head('Leave policy', 'The rules every leave request is checked against') +
+    '<div class="loading" id="body">Loading...</div>';
+
+  try {
+    const [policy, holidays] = await Promise.all([
+      api.get('/api/leave-policies'),
+      api.get('/api/leave-policies/holidays'),
+    ]);
+    const p = policy.data;
+
+    document.getElementById('body').outerHTML = `
+      <div class="grid grid-2">
+        <div class="card">
+          <h2>Rules</h2>
+          <div id="message"></div>
+          <form id="form">
+            <div class="field">
+              <label for="defaultAnnualDays">Default annual entitlement (days)</label>
+              <input id="defaultAnnualDays" type="number" min="1" max="365" value="${p.default_annual_days}">
+              <div class="hint">Given to every new employee.</div>
+            </div>
+            <div class="field">
+              <label for="excludeWeekends">Weekends</label>
+              <select id="excludeWeekends">
+                <option value="true" ${p.exclude_weekends ? 'selected' : ''}>Do not count as leave</option>
+                <option value="false" ${!p.exclude_weekends ? 'selected' : ''}>Count as leave</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="excludeHolidays">Public holidays</label>
+              <select id="excludeHolidays">
+                <option value="true" ${p.exclude_holidays ? 'selected' : ''}>Do not count as leave</option>
+                <option value="false" ${!p.exclude_holidays ? 'selected' : ''}>Count as leave</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="minNoticeDays">Notice required (days)</label>
+                <input id="minNoticeDays" type="number" min="0" max="90" value="${p.min_notice_days}">
+              </div>
+              <div class="field">
+                <label for="maxConsecutiveDays">Longest single request</label>
+                <input id="maxConsecutiveDays" type="number" min="1" max="365" value="${p.max_consecutive_days}">
+              </div>
+            </div>
+            <button class="btn" type="submit">Save policy</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Company holidays</h2>
+            <button class="btn small" onclick="addHoliday()">Add</button>
+          </div>
+          <div id="holidays"></div>
+        </div>
+      </div>`;
+
+    renderHolidays(holidays.data);
+
+    document.getElementById('form').onsubmit = async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('message');
+      message.innerHTML = '';
+      try {
+        await api.patch('/api/leave-policies', {
+          defaultAnnualDays: Number(document.getElementById('defaultAnnualDays').value),
+          excludeWeekends: document.getElementById('excludeWeekends').value === 'true',
+          excludeHolidays: document.getElementById('excludeHolidays').value === 'true',
+          minNoticeDays: Number(document.getElementById('minNoticeDays').value),
+          maxConsecutiveDays: Number(document.getElementById('maxConsecutiveDays').value),
+        });
+        message.innerHTML = ui.alert('Policy saved.', 'ok');
+      } catch (err) {
+        message.innerHTML = ui.alert(err.message, 'error');
+      }
+    };
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+function renderHolidays(rows) {
+  document.getElementById('holidays').innerHTML = ui.table(
+    ['Date', 'Name', ''],
+    rows.map(h => [
+      ui.date(h.holiday_date),
+      ui.escape(h.name),
+      '<button class="btn small danger" onclick="removeHoliday(' + h.id + ')">Remove</button>',
+    ]),
+    'No holidays added yet.'
+  );
+}
+
+function addHoliday() {
+  ui.modal('Add a company holiday', `
+    <div class="field"><label for="date">Date</label><input id="date" name="date" type="date" required></div>
+    <div class="field"><label for="name">Name</label><input id="name" name="name" required maxlength="255"></div>`,
+    async (form) => {
+      await api.post('/api/leave-policies/holidays', { date: form.get('date'), name: form.get('name') });
+      const holidays = await api.get('/api/leave-policies/holidays');
+      renderHolidays(holidays.data);
+      ui.toast('Holiday added.', 'ok');
+    });
+}
+
+async function removeHoliday(id) {
+  try {
+    await api.del('/api/leave-policies/holidays/' + id);
+    const holidays = await api.get('/api/leave-policies/holidays');
+    renderHolidays(holidays.data);
+    ui.toast('Holiday removed.', 'ok');
+  } catch (err) {
+    ui.toast(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

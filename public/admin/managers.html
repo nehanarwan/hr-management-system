@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Managers &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/managers.html');
+  main.innerHTML = ui.head('Managers', 'Who can approve leave, and for which departments',
+    '<a class="btn secondary" href="/admin/departments.html">Assign a manager</a>') +
+    '<div class="card"><div id="list" class="loading">Loading...</div></div>';
+
+  try {
+    const result = await api.get('/api/departments/managers');
+    const list = document.getElementById('list');
+    list.className = '';
+    list.innerHTML = ui.table(
+      ['Name', 'Email', 'Departments they manage'],
+      result.data.map(m => [
+        '<strong>' + ui.name(m) + '</strong>',
+        ui.escape(m.email),
+        (m.departments || []).length
+          ? (m.departments || []).map(d => '<span class="badge role">' + ui.escape(d) + '</span>').join(' ')
+          : '<span style="color:var(--ink-3)">None</span>',
+      ]),
+      'No managers yet. Assign one from the Departments page.'
+    );
+  } catch (err) {
+    document.getElementById('list').innerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

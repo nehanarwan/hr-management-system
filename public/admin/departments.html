@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Departments &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+let employees = [];
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/departments.html');
+  main.innerHTML = ui.head('Departments', 'Create departments and choose who runs them',
+    '<button class="btn" onclick="addDepartment()">New department</button>') +
+    '<div class="card"><div id="list" class="loading">Loading...</div></div>';
+
+  const people = await api.get('/api/employees?limit=200');
+  employees = people.data;
+  load();
+}
+
+async function load() {
+  const list = document.getElementById('list');
+  try {
+    const result = await api.get('/api/departments?limit=50');
+    list.className = '';
+    list.innerHTML = ui.table(
+      ['Department', 'Manager', 'Employees', 'Created', ''],
+      result.data.map(d => [
+        '<strong>' + ui.escape(d.name) + '</strong>',
+        d.manager_first_name ? ui.escape(d.manager_first_name + ' ' + d.manager_last_name)
+          : '<span style="color:var(--ink-3)">Not assigned</span>',
+        '<span class="num">' + d.employee_count + '</span>',
+        ui.date(d.created_at),
+        '<div class="btn-row">' +
+          '<button class="btn small secondary" onclick="assignManager(' + d.id + ')">Manager</button>' +
+          '<button class="btn small secondary" onclick="renameDepartment(' + d.id + ", '" + ui.escape(d.name).replace(/'/g, "") + "')" + '">Rename</button>' +
+          '<button class="btn small danger" onclick="removeDepartment(' + d.id + ')">Delete</button>' +
+        '</div>',
+      ]),
+      'No departments yet. Create the first one.'
+    );
+  } catch (err) {
+    list.className = '';
+    list.innerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+function addDepartment() {
+  ui.modal('New department', `
+    <div class="field"><label for="name">Name</label><input id="name" name="name" required maxlength="255"></div>`,
+    async (form) => {
+      await api.post('/api/departments', { name: form.get('name') });
+      ui.toast('Department created.', 'ok');
+      load();
+    });
+}
+
+function renameDepartment(id, current) {
+  ui.modal('Rename department', `
+    <div class="field"><label for="name">Name</label><input id="name" name="name" required value="${current}"></div>`,
+    async (form) => {
+      await api.patch('/api/departments/' + id, { name: form.get('name') });
+      ui.toast('Department renamed.', 'ok');
+      load();
+    });
+}
+
+function assignManager(id) {
+  const options = employees
+    .map(e => '<option value="' + e.id + '">' + ui.escape(e.first_name + ' ' + e.last_name) + '</option>')
+    .join('');
+  ui.modal('Choose a manager', `
+    <div class="field">
+      <label for="employeeId">Employee</label>
+      <select id="employeeId" name="employeeId" required>${options}</select>
+      <div class="hint">They will be given the manager role. Past approvals are not affected.</div>
+    </div>`, async (form) => {
+    await api.patch('/api/departments/' + id + '/manager', { employeeId: Number(form.get('employeeId')) });
+    ui.toast('Manager assigned.', 'ok');
+    load();
+  });
+}
+
+async function removeDepartment(id) {
+  try {
+    await api.del('/api/departments/' + id);
+    ui.toast('Department deleted.', 'ok');
+    load();
+  } catch (err) {
+    ui.toast(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

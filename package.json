@@ -1,0 +1,33 @@
+{
+  "name": "hr-saas",
+  "version": "1.0.0",
+  "description": "Multi-tenant HR Management System - employees, departments, leave requests, approvals and an AI HR assistant",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "seed": "node scripts/seed.js",
+    "test": "jest --runInBand --forceExit",
+    "migrate:create": "node-pg-migrate create",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-pg-migrate": "^7.9.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.0.0"
+  }
+}

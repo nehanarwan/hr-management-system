@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/settings.html');
+  main.innerHTML = ui.head('Settings', 'System information and where each setting lives') + `
+    <div class="grid grid-2">
+      <div class="card">
+        <h2>Signed in as</h2>
+        <div class="table-wrap"><table><tbody>
+          <tr><td>Name</td><td>${ui.escape(user.firstName + ' ' + user.lastName)}</td></tr>
+          <tr><td>Email</td><td>${ui.escape(user.email)}</td></tr>
+          <tr><td>Role</td><td><span class="badge role">${ui.escape(user.role)}</span></td></tr>
+          <tr><td>Company</td><td>${ui.escape(user.companyName)}</td></tr>
+        </tbody></table></div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn secondary" onclick="logout()">Sign out</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Where things are configured</h2>
+        <div class="table-wrap"><table><tbody>
+          <tr><td>Leave rules and holidays</td><td><a href="/admin/leave-policies.html">Leave policy</a></td></tr>
+          <tr><td>Departments and managers</td><td><a href="/admin/departments.html">Departments</a></td></tr>
+          <tr><td>Employees and entitlements</td><td><a href="/admin/employees.html">Employees</a></td></tr>
+        </tbody></table></div>
+        <h3 style="margin-top:20px">HR assistant</h3>
+        <p id="chat-mode" class="hint">Checking...</p>
+      </div>
+    </div>`;
+
+  // Shows whether the assistant is talking to the Claude API or using the
+  // built-in rules, which is decided by ANTHROPIC_API_KEY on the server.
+  try {
+    const result = await api.post('/api/chat', { message: 'What is the company leave policy?' });
+    document.getElementById('chat-mode').textContent = result.data.mode === 'claude'
+      ? 'Connected to the Claude API. Answers are generated from your authorised HR data.'
+      : 'Running on the built-in rules. Set ANTHROPIC_API_KEY in the server .env file to use the Claude API.';
+  } catch (err) {
+    document.getElementById('chat-mode').textContent = 'The assistant is not responding: ' + err.message;
+  }
+}
+
+  </script>
+</body>
+</html>

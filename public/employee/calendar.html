@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leave calendar &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('employee', 'manager', 'admin');
+let shown = new Date();
+
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/employee/calendar.html');
+  main.innerHTML = ui.head('Leave calendar', 'Approved leave across ' + user.companyName) + `
+    <div class="card">
+      <div class="card-head">
+        <div class="cal-nav">
+          <button class="btn secondary small" onclick="move(-1)">&larr;</button>
+          <strong id="label"></strong>
+          <button class="btn secondary small" onclick="move(1)">&rarr;</button>
+        </div>
+      </div>
+      <div id="cal" class="loading">Loading...</div>
+    </div>`;
+  load();
+}
+
+function move(step) {
+  shown = new Date(Date.UTC(shown.getUTCFullYear(), shown.getUTCMonth() + step, 1));
+  load();
+}
+
+async function load() {
+  const year = shown.getUTCFullYear();
+  const month = shown.getUTCMonth();
+  document.getElementById('label').textContent = ui.monthName(year, month);
+
+  const from = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  const cal = document.getElementById('cal');
+
+  try {
+    const result = await api.get('/api/calendar?from=' + from + '&to=' + to);
+    cal.className = '';
+    cal.innerHTML = ui.calendar(year, month, result.data);
+  } catch (err) {
+    cal.className = '';
+    cal.innerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

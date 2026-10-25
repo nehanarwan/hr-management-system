@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My leave &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('employee', 'manager', 'admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/employee/leave.html');
+  main.innerHTML = ui.head('My leave', 'Your entitlement, your requests and what happened to them',
+    '<a class="btn" href="/employee/request.html">Request leave</a>') +
+    '<div class="loading" id="body">Loading...</div>';
+
+  try {
+    const [balance, policy, requests] = await Promise.all([
+      api.get('/api/leave/my-balance'),
+      api.get('/api/leave-policies'),
+      api.get('/api/leave/requests?limit=50'),
+    ]);
+    const b = balance.data;
+    const p = policy.data;
+    const rows = requests.data;
+
+    document.getElementById('body').outerHTML = `
+      <div id="news"></div>
+
+      <div class="grid grid-4">
+        ${ui.stat('Entitlement', b.entitlement, 'days for ' + b.year)}
+        ${ui.stat('Approved', b.used, 'days used')}
+        ${ui.stat('Pending', b.pending, 'days awaiting a decision')}
+        ${ui.stat('Remaining', b.remaining, 'days left', true)}
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="card-head">
+          <h2>Your requests</h2>
+          <a href="/employee/history.html">Full history</a>
+        </div>
+        ${ui.table(
+          ['Dates', 'Days', 'Reason', 'Status', 'Decided by', 'Their comment'],
+          rows.slice(0, 10).map(r => [
+            ui.range(r.start_date, r.end_date),
+            '<span class="num">' + r.total_days + '</span>',
+            ui.escape(r.user_comment || '-'),
+            ui.badge(r.status),
+            r.reviewer_first_name ? ui.escape(r.reviewer_first_name + ' ' + r.reviewer_last_name) : '-',
+            ui.escape(r.reviewer_comment || '-'),
+          ]),
+          'You have not requested any leave yet.'
+        )}
+      </div>
+
+      <div class="card">
+        <h2>How your balance is worked out</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr><td>Annual entitlement for ${b.year}</td><td class="num" style="text-align:right">${b.entitlement}</td></tr>
+              <tr><td>Leave already approved</td><td class="num" style="text-align:right">&minus; ${b.used}</td></tr>
+              <tr><td><strong>Remaining balance</strong></td><td class="num" style="text-align:right"><strong>${b.remaining}</strong></td></tr>
+              <tr><td>Reserved by pending requests</td><td class="num" style="text-align:right">&minus; ${b.pending}</td></tr>
+              <tr><td><strong>You can still request</strong></td><td class="num" style="text-align:right"><strong>${b.requestable}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint">Pending requests do not come off your balance. They are only reserved so you cannot book the same days twice.</p>
+      </div>
+
+      <div class="card">
+        <h2>Company leave rules</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr><td>Default annual entitlement</td><td>${p.default_annual_days} days</td></tr>
+              <tr><td>Weekends</td><td>${p.exclude_weekends ? 'Not counted as leave' : 'Counted as leave'}</td></tr>
+              <tr><td>Public holidays</td><td>${p.exclude_holidays ? 'Not counted as leave' : 'Counted as leave'}</td></tr>
+              <tr><td>Notice required</td><td>${p.min_notice_days} day(s)</td></tr>
+              <tr><td>Longest single request</td><td>${p.max_consecutive_days} days</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+
+    showNewDecisions(rows);
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+function seenKey() {
+  return 'hr_seen_decision_' + user.employeeId;
+}
+
+function showNewDecisions(rows) {
+  const decided = rows.filter(r => r.status === 'Approved' || r.status === 'Rejected');
+  if (decided.length === 0) return;
+
+  let lastSeen = 0;
+  try {
+    lastSeen = Number(localStorage.getItem(seenKey())) || 0;
+  } catch (err) {
+    lastSeen = 0;
+  }
+
+  const fresh = decided.filter(r => r.id > lastSeen);
+  if (fresh.length === 0) return;
+
+  const newest = Math.max.apply(null, decided.map(r => r.id));
+
+  const lines = fresh.map(function (r) {
+    const who = r.reviewer_first_name ? ' by ' + r.reviewer_first_name + ' ' + r.reviewer_last_name : '';
+    const why = r.reviewer_comment ? ' &mdash; "' + ui.escape(r.reviewer_comment) + '"' : '';
+    return '<li>Your leave from <strong>' + ui.range(r.start_date, r.end_date) + '</strong> (' +
+      r.total_days + ' day(s)) was <strong>' + r.status.toLowerCase() + '</strong>' +
+      ui.escape(who) + why + '</li>';
+  }).join('');
+
+  document.getElementById('news').innerHTML =
+    '<div class="alert ' + (fresh.some(r => r.status === 'Rejected') ? 'error' : 'ok') + '" id="news-box">' +
+      '<strong>' + fresh.length + ' update' + (fresh.length > 1 ? 's' : '') + ' on your requests</strong>' +
+      '<ul style="margin:8px 0 0;padding-left:18px">' + lines + '</ul>' +
+      '<button type="button" class="btn small secondary" style="margin-top:10px" id="dismiss">Got it</button>' +
+    '</div>';
+
+  document.getElementById('dismiss').onclick = function () {
+    try {
+      localStorage.setItem(seenKey(), String(newest));
+    } catch (err) {
+    }
+    document.getElementById('news-box').remove();
+  };
+}
+
+  </script>
+</body>
+</html>

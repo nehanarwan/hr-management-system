@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin dashboard &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/dashboard.html');
+  main.innerHTML = ui.head('Company dashboard', user.companyName + ' at a glance',
+    '<a class="btn" href="/admin/employees.html">Add employee</a>') +
+    '<div class="loading" id="body">Loading company data...</div>';
+
+  try {
+    const [stats, out, pending] = await Promise.all([
+      api.get('/api/calendar/company-stats'),
+      api.get('/api/calendar/who-is-out'),
+      api.get('/api/manager/leave-requests?status=Pending&limit=5'),
+    ]);
+    const s = stats.data;
+
+    document.getElementById('body').outerHTML = `
+      <div class="grid grid-4">
+        ${ui.stat('Employees', s.employee_count, 'with an account')}
+        ${ui.stat('Departments', s.department_count, 'in the company')}
+        ${ui.stat('Pending requests', s.pending_count, 'awaiting a manager', true)}
+        ${ui.stat('Off today', s.on_leave_today, 'on approved leave')}
+      </div>
+
+      <div class="grid grid-2" style="margin-top:18px">
+        <div class="card">
+          <h2>Leave this year</h2>
+          <div class="table-wrap">
+            <table><tbody>
+              <tr><td>Days approved and used</td><td class="num" style="text-align:right">${s.days_used_this_year}</td></tr>
+              <tr><td>Approved requests</td><td class="num" style="text-align:right">${s.approved_count}</td></tr>
+              <tr><td>Rejected requests</td><td class="num" style="text-align:right">${s.rejected_count}</td></tr>
+              <tr><td>Still pending</td><td class="num" style="text-align:right">${s.pending_count}</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Off today</h2>
+          ${ui.table(['Employee', 'Department', 'Until'], out.data.map(r => [
+            ui.name(r), ui.escape(r.department_name || '-'), ui.date(r.end_date),
+          ]), 'Everyone is in today.')}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="card-head"><h2>Requests waiting for a decision</h2>
+          <a href="/manager/leave-requests.html">Review</a></div>
+        ${ui.table(['Employee', 'Department', 'Dates', 'Days'], pending.data.map(r => [
+          ui.name(r), ui.escape(r.department_name || '-'),
+          ui.range(r.start_date, r.end_date), '<span class="num">' + r.total_days + '</span>',
+        ]), 'Nothing is waiting.')}
+      </div>`;
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

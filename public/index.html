@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <div class="landing">
+    <section class="pitch">
+      <h1>Leave management your team will actually use</h1>
+      <p>One place for entitlements, requests, approvals and the team calendar &mdash; with an HR assistant that answers from your real data.</p>
+      <ul>
+        <li>Employees see their balance and book leave in seconds</li>
+        <li>Managers approve or reject with a reason, and the history is kept</li>
+        <li>Administrators run departments, entitlements and policy</li>
+        <li>Every company's data stays completely separate</li>
+      </ul>
+    </section>
+
+    <section class="form-side">
+      <div class="form-box">
+        <h2>Sign in</h2>
+        <p>Choose how you are signing in. Your account decides what you can see.</p>
+
+        <div class="role-tabs" id="tabs">
+          <button type="button" class="active" data-role="employee">Employee</button>
+          <button type="button" data-role="manager">Manager</button>
+          <button type="button" data-role="admin">Admin</button>
+        </div>
+
+        <div id="message"></div>
+
+        <form id="login-form">
+          <div class="field">
+            <label for="companySlug">Company</label>
+            <input id="companySlug" name="companySlug" required placeholder="northwind">
+            <div class="hint">The short name your company was registered with.</div>
+          </div>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" required placeholder="you@company.com">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required>
+          </div>
+          <button type="submit" class="btn" style="width:100%" id="submit">Sign in</button>
+        </form>
+
+        <p style="text-align:center;margin:16px 0 0;font-size:.92rem">
+          New company? <a href="/register.html">Create a company account</a>
+        </p>
+
+        <div class="demo-accounts">
+          <strong>Demo accounts</strong> (password <code>password123</code>)<br>
+          <button type="button" data-fill="northwind|selin@northwind.com">Employee at Northwind</button> &middot;
+          <button type="button" data-fill="northwind|mert@northwind.com">Manager at Northwind</button> &middot;
+          <button type="button" data-fill="northwind|admin@northwind.com">Admin at Northwind</button><br>
+          <button type="button" data-fill="bluepeak|amara@bluepeak.com">Employee at Bluepeak</button> &middot;
+          <button type="button" data-fill="bluepeak|jonas@bluepeak.com">Manager at Bluepeak</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (api.token() && api.user()) {
+      window.location.href = homeFor(api.user().role);
+    }
+
+    document.getElementById('tabs').onclick = function (event) {
+      if (!event.target.dataset.role) return;
+      document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.remove('active'); });
+      event.target.classList.add('active');
+    };
+
+    document.querySelectorAll('[data-fill]').forEach(function (button) {
+      button.onclick = function () {
+        var parts = button.dataset.fill.split('|');
+        document.getElementById('companySlug').value = parts[0];
+        document.getElementById('email').value = parts[1];
+        document.getElementById('password').value = 'password123';
+      };
+    });
+
+    document.getElementById('login-form').onsubmit = async function (event) {
+      event.preventDefault();
+      var message = document.getElementById('message');
+      var submit = document.getElementById('submit');
+      message.innerHTML = '';
+      submit.disabled = true;
+      submit.textContent = 'Signing in...';
+
+      try {
+        var user = await login(
+          document.getElementById('companySlug').value.trim().toLowerCase(),
+          document.getElementById('email').value.trim(),
+          document.getElementById('password').value
+        );
+        window.location.href = homeFor(user.role);
+      } catch (err) {
+        message.innerHTML = '<div class="alert error">' + err.message + '</div>';
+        submit.disabled = false;
+        submit.textContent = 'Sign in';
+      }
+    };
+  </script>
+</body>
+</html>

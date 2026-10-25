@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Company &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('admin');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/admin/company.html');
+  main.innerHTML = ui.head('Company', 'How ' + user.companyName + ' is set up') +
+    '<div class="loading" id="body">Loading...</div>';
+
+  try {
+    const [stats, departments, policy] = await Promise.all([
+      api.get('/api/calendar/company-stats'),
+      api.get('/api/departments?limit=100'),
+      api.get('/api/leave-policies'),
+    ]);
+    const s = stats.data;
+
+    document.getElementById('body').outerHTML = `
+      <div class="grid grid-2">
+        <div class="card">
+          <h2>Details</h2>
+          <div class="table-wrap"><table><tbody>
+            <tr><td>Company name</td><td><strong>${ui.escape(user.companyName)}</strong></td></tr>
+            <tr><td>Sign-in slug</td><td><code>${ui.escape(user.companySlug)}</code></td></tr>
+            <tr><td>Employees</td><td class="num">${s.employee_count}</td></tr>
+            <tr><td>Departments</td><td class="num">${s.department_count}</td></tr>
+            <tr><td>Default entitlement</td><td>${policy.data.default_annual_days} days</td></tr>
+          </tbody></table></div>
+          <p class="hint">Everyone signs in with the slug plus their email, which is why two companies can both have an employee called alice@example.com.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Departments</h2><a href="/admin/departments.html">Manage</a></div>
+          ${ui.table(['Department', 'Manager', 'People'], departments.data.map(d => [
+            ui.escape(d.name),
+            d.manager_first_name ? ui.escape(d.manager_first_name + ' ' + d.manager_last_name) : '-',
+            '<span class="num">' + d.employee_count + '</span>',
+          ]), 'No departments yet.')}
+        </div>
+      </div>`;
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>

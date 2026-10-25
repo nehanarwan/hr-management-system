@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Employee &middot; HR Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/chat.js"></script>
+  <script>
+
+const user = requireRole('manager', 'admin');
+const employeeId = new URLSearchParams(location.search).get('id');
+if (user) start();
+
+async function start() {
+  const main = ui.layout(user, '/manager/employees.html');
+  main.innerHTML = ui.head('Employee', 'Leave record',
+    '<a class="btn secondary" href="/manager/employees.html">Back to team</a>') +
+    '<div class="loading" id="body">Loading...</div>';
+
+  if (!employeeId) {
+    document.getElementById('body').outerHTML = ui.alert('No employee was selected.', 'error');
+    return;
+  }
+
+  try {
+    const [employee, balance] = await Promise.all([
+      api.get('/api/employees/' + employeeId),
+      api.get('/api/employees/' + employeeId + '/leave-balance'),
+    ]);
+    const e = employee.data;
+    const b = balance.data;
+
+    document.getElementById('body').outerHTML = `
+      <div class="card">
+        <h2>${ui.escape(e.first_name + ' ' + e.last_name)}</h2>
+        <p style="margin:0;color:var(--ink-2)">
+          ${ui.escape(e.department_name || 'No department')} &middot; ${ui.escape(e.email || 'no login account')}
+          &middot; <span class="badge role">${ui.escape(e.role || 'employee')}</span>
+        </p>
+      </div>
+      <div class="grid grid-4" style="margin-top:18px">
+        ${ui.stat('Entitlement', b.entitlement, 'days for ' + b.year)}
+        ${ui.stat('Approved', b.used, 'days used')}
+        ${ui.stat('Pending', b.pending, 'days awaiting decision')}
+        ${ui.stat('Remaining', b.remaining, 'days left', true)}
+      </div>`;
+  } catch (err) {
+    document.getElementById('body').outerHTML = ui.alert(err.message, 'error');
+  }
+}
+
+  </script>
+</body>
+</html>
